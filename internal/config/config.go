@@ -17,7 +17,7 @@ func Load () (*Config , error) {
 	}
 	ServerPort := os.Getenv("SERVER_PORT")
 	if ServerPort == "" {
-		ServerPort = "8080"
+		ServerPort = ":8080"
 	}
 	return &Config{
 		DatabaseURL: DatabaseURL,

@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: wallet_secret
       POSTGRES_DB: digital_wallet
     ports:
-      - "4000:4000"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

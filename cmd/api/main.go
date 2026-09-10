@@ -8,17 +8,23 @@ import (
 	"github.com/adhamelsaady/digital-wallet/internal/api"
 	"github.com/adhamelsaady/digital-wallet/internal/config"
 	"github.com/adhamelsaady/digital-wallet/internal/db"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	cfg , err := config.Load()
+	// Load .env file if present. Non-fatal: in production, env vars are set directly.
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, reading config from environment")
+	}
+
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal("confing eror : %v" , err)
+		log.Fatalf("config error: %v", err)
 	}
 	ctx := context.Background()
-	pool , err := db.New(ctx , cfg.DatabaseURL)
+	pool, err := db.New(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatal("db eror : %v" , err)
+		log.Fatalf("db error: %v", err)
 	}
 	defer pool.Close()
 	log.Println(" database connection established")
