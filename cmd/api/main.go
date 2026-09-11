@@ -12,11 +12,7 @@ import (
 )
 
 func main() {
-	// Load .env file if present. Non-fatal: in production, env vars are set directly.
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, reading config from environment")
-	}
-
+	godotenv.Load()
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config error: %v", err)
