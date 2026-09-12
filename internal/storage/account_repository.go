@@ -2,14 +2,14 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"errors"
+	"fmt"
+
 	"github.com/adhamelsaady/digital-wallet/internal/ledger"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5"
 	"github.com/google/uuid"
-	
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type AccountRepository struct {
@@ -51,4 +51,23 @@ func (r *AccountRepository) GetAccountById (ctx context.Context , id uuid.UUID) 
 		return nil, fmt.Errorf("storage: failed to get account %s: %w", id, err)
 	}
 	return &result , nil
+}
+
+func (r *AccountRepository) CalculateBalance (ctx context.Context , accountId uuid.UUID) (int64 , error) {
+
+	query := `SELECT COALESCE(
+			SUM(
+				CASE 
+					WHEN entry_type = 'CREDIT' THEN amount 
+					WHEN entry_type = 'DEBIT'  THEN -amount 
+					ELSE 0 
+				END
+			), 0 )FROM ledger_entries WHERE account_id = $1`
+
+	var balance int64
+	err := r.pool.QueryRow(ctx , query , accountId).Scan(balance)
+	if err != nil {
+		return 0, fmt.Errorf("storage: failed to calculate balance for account %s: %w", accountId, err)
+	}
+	return balance , nil
 }
