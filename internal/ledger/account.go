@@ -30,6 +30,7 @@ var	ErrorAccountNotFound = errors.New("account not found")
 var	ErrorInsufficientFunds = errors.New("insufficient funds")
 var	ErrorInvalidOwner = errors.New("invalid owner")
 var	ErrorInvalidType = errors.New("invalid account type")
+var ErrorAccountDuplicate = errors.New("duplicate account")
 
 func NewAccount (ownerId uuid.UUID, currency string , accountType string) (*Account, error) {
 	if ownerId == uuid.Nil {
