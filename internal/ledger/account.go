@@ -18,7 +18,7 @@ var supportedCurrencies = map[string]bool {
 type Account struct {
 	ID uuid.UUID `json:"id"`
 	OwnerID uuid.UUID `json:"owner_id"`
-	Currency string `json:"currency`
+	Currency string `json:"currency"`
 	Type string `json:"type"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
