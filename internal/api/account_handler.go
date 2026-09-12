@@ -55,7 +55,3 @@ func (accountHandler *AccountHandler) CreateAccount (writer http.ResponseWriter 
 	}
 	writeJSON(writer, http.StatusCreated, account)
 }
-
-func (accountHandler *AccountHandler) GetAccountBalance(){
-	// to-do
-}

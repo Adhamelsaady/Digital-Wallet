@@ -8,6 +8,7 @@ import (
 	"github.com/adhamelsaady/digital-wallet/internal/api"
 	"github.com/adhamelsaady/digital-wallet/internal/config"
 	"github.com/adhamelsaady/digital-wallet/internal/db"
+	"github.com/adhamelsaady/digital-wallet/internal/storage"
 	"github.com/joho/godotenv"
 )
 
@@ -25,11 +26,17 @@ func main() {
 	defer pool.Close()
 	log.Println(" database connection established")
 
-	router := api.NewRouter()
+	accountRepository := storage.NewAccountRepository(pool)
+	accountHandler := api.NewAccountHandler(accountRepository)
 
-	log.Printf("listening on port : %s" , cfg.ServerPort)
+	router := api.NewRouter(accountHandler)
+	addr := cfg.ServerPort
+	if addr != "" && addr[0] != ':' {
+		addr = ":" + addr
+	}
+	log.Printf("listening on port : %s" , addr)
 	
-	if err := http.ListenAndServe(cfg.ServerPort, router); err != nil {
+	if err := http.ListenAndServe(addr, router); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 }
