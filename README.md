@@ -2,104 +2,154 @@
 
 ## Overview
 
-This project implements a robust financial system designed to handle account balances and transactions securely and accurately. The core accounting engine adheres strictly to **double-entry bookkeeping principles**, ensuring that every financial mutation balances debits against credits.
+This project implements a production-grade digital wallet and double-entry ledger engine built with Go and PostgreSQL. The system adheres strictly to double-entry bookkeeping principles, guaranteeing that account balances are mathematically derived from immutable ledger entries rather than stored as mutable state.
 
-## Key Architectural Decisions
+---
 
-- **Double-Entry Accounting:** Every transaction consists of matched debit and credit entries.
-- **Exact Integer Financials:** All monetary amounts are stored in minor units (`int64`, e.g., cents) to completely avoid floating-point rounding errors.
-- **Strong Concurrency & Isolation:** Built with PostgreSQL `SERIALIZABLE` transactions and explicit row-locking to guarantee data integrity under concurrent traffic.
-- **Idiomatic & No-ORM Go:** Pure SQL via `pgx` for full control over database execution and zero magic abstractions.
+## Architectural Principles & Decisions
+
+- **Double-Entry Accounting:** Every financial mutation is represented by balanced ledger entries (credits and debits). Account balances are calculated dynamically from an immutable append-only audit trail (`COALESCE(SUM(...), 0)`), preventing lost updates, race conditions, and accounting discrepancies.
+- **Exact Integer Financials:** All monetary amounts are stored as 64-bit integers (`int64` / PostgreSQL `BIGINT`) representing minor units (e.g., cents). Floating-point types are strictly forbidden to eliminate rounding errors.
+- **No ORM / Explicit SQL:** Database operations use raw parameterized SQL via `pgx/v5` (`pgxpool`). This provides explicit control over query plans, isolation levels, and row locking.
+- **Clean Architecture & Consumer-Driven Interfaces:** Interfaces are declared in the domain layer where they are consumed (`ledger.AccountStore`), keeping the core domain completely decoupled from concrete persistence implementations.
+- **Domain-Driven Error Mapping:** Low-level database errors (such as unique key violations or `pgx.ErrNoRows`) are mapped to sentinel domain errors in the storage layer, preventing infrastructure leakage into API handlers.
+- **Explicit Dependency Injection:** Dependencies are constructed and wired explicitly in `cmd/api/main.go` without reflection or global state.
+
+---
 
 ## Tech Stack
 
 - **Language:** Go 1.22+
 - **Database:** PostgreSQL 16
-- **Database Driver / Connection Pool:** `pgx/v5` (`pgxpool`)
-- **HTTP Router:** `chi/v5`
-- **UUID Generation:** `google/uuid`
-- **Testing:** Standard `testing` package + `testify` for assertions
+- **Database Driver & Connection Pool:** `jackc/pgx/v5` (`pgxpool`)
+- **HTTP Router & Middleware:** `go-chi/chi/v5`
+- **Identifier Format:** `google/uuid` (UUIDv4)
+- **Testing:** Standard `testing` package with `stretchr/testify`
 - **Containerization:** Docker & Docker Compose
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 .
 ├── cmd/
 │   └── api/
-│       └── main.go                 # Application entry point & dependency wiring
+│       └── main.go                 # Composition root & dependency wiring
 ├── internal/
-│   ├── config/                     # Environment configuration loader
-│   ├── db/                         # pgx connection pool setup & health ping
-│   ├── ledger/                     # Domain entities, validation, and business logic
-│   ├── storage/                    # Database repositories with raw SQL
-│   └── api/                        # HTTP handlers, router, and JSON response helpers
-├── migrations/                     # SQL schema migration files
-├── docker-compose.yml              # Local PostgreSQL 16 container definition
-├── .env                            # Local environment variables (ignored in git)
+│   ├── config/                     # Environment variable parsing
+│   ├── db/                         # PostgreSQL connection pool lifecycle (pgxpool)
+│   ├── ledger/                     # Pure business domain: entities, invariants, service
+│   │   ├── account.go              # Account entity & constructor validation
+│   │   ├── account_test.go         # Table-driven unit tests for Account
+│   │   ├── ledger.go               # LedgerEntry entity & balance calculation logic
+│   │   ├── ledger_test.go          # Unit tests for ledger operations
+│   │   └── service.go              # Ledger service & AccountStore consumer interface
+│   ├── storage/                    # Infrastructure layer: raw SQL repository implementations
+│   │   └── account_repository.go   # PostgreSQL account and balance queries
+│   └── api/                        # HTTP transport layer
+│       ├── account_handler.go      # REST handlers for accounts & balances
+│       ├── health.go               # Health check handler
+│       ├── response.go             # Standardized JSON response helpers
+│       └── router.go               # Chi router setup & middleware pipelines
+├── migrations/                     # Plain SQL database migrations
+│   ├── 000001_create_accounts_table.up.sql
+│   ├── 000001_create_accounts_table.down.sql
+│   ├── 000002_create_ledger_entries.up.sql
+│   └── 000002_create_ledger_entries.down.sql
+├── docker-compose.yml              # Local PostgreSQL 16 service
+├── .env.example                    # Sample environment configuration
 ├── go.mod
 └── go.sum
 ```
 
 ---
 
-## Features Implemented So Far
+## Database Schema Design
 
-### 1. Skeleton & Local Environment (Phase 1)
-- [x] Dockerized PostgreSQL 16 database with automated healthchecks.
-- [x] Resilient database connection pooling with `pgxpool.New` and startup ping verification.
-- [x] HTTP server with `chi` router, request logger, and panic recovery middleware.
-- [x] Health check endpoint: `GET /health` → `{"status":"ok"}`.
+### 1. `accounts`
+Stores identity and currency boundaries. Balances are intentionally not stored here.
+- `id` (UUID, Primary Key)
+- `owner_id` (UUID, Hash Index)
+- `currency` (VARCHAR(3), e.g., 'USD', 'EUR')
+- `type` (VARCHAR(32), e.g., 'AVAILABLE')
+- `created_at`, `updated_at` (TIMESTAMPTZ)
+- *Constraint:* `UNIQUE(owner_id, currency)` prevents duplicate accounts for the same currency.
 
-### 2. Schema & Accounts (Phase 2)
-- [x] Database migration for `accounts` table with unique constraint on `(owner_id, currency)` and hash indexing on `owner_id`.
-- [x] Domain entity `Account` with constructor validation (ISO currency check, valid owner UUID).
-- [x] Table-driven unit tests for account creation and validation logic using `testify`.
-- [x] Storage repository (`AccountRepository`) with raw SQL queries and PostgreSQL error code mapping (handling `23505` unique violations and `ErrNoRows`).
-- [x] API handler for creating accounts: `POST /accounts`.
+### 2. `transactions`
+Represents an idempotent financial business event.
+- `id` (UUID, Primary Key)
+- `idempotency_key` (VARCHAR(255), UNIQUE)
+- `reference_type` (VARCHAR(64), e.g., 'TRANSFER', 'DEPOSIT')
+- `description` (TEXT)
+- `status` (VARCHAR(32), DEFAULT 'COMPLETED')
+- `created_at` (TIMESTAMPTZ)
+
+### 3. `ledger_entries`
+Immutable append-only ledger entries associated with a transaction.
+- `id` (UUID, Primary Key)
+- `transaction_id` (UUID, Foreign Key $\rightarrow$ `transactions.id`)
+- `account_id` (UUID, Foreign Key $\rightarrow$ `accounts.id`)
+- `amount` (BIGINT, CHECK `amount > 0`)
+- `entry_type` (VARCHAR(6), CHECK `entry_type IN ('DEBIT', 'CREDIT')`)
+- `created_at` (TIMESTAMPTZ)
+- *Indexes:* `idx_ledger_entries_account_id`, `idx_ledger_entries_transaction_id`
 
 ---
 
 ## Getting Started
 
 ### 1. Prerequisites
-- [Go](https://go.dev/dl/) (1.22 or higher)
-- [Docker & Docker Compose](https://www.docker.com/)
-- `curl` or Postman for API testing
+- Go 1.22+
+- Docker and Docker Compose
 
-### 2. Start PostgreSQL
+### 2. Environment Configuration
+Create a `.env` file in the project root:
+```env
+PORT=8080
+DATABASE_URL=postgres://wallet:wallet_secret@localhost:5433/digital_wallet?sslmode=disable
+```
+
+### 3. Start Database
 ```powershell
 docker compose up -d
 ```
 
-### 3. Run Database Migrations
-Apply the initial database schema:
+### 4. Run Migrations
+Apply migration files in sequence:
 ```powershell
 docker exec -i digital_wallet_db psql -U wallet -d digital_wallet < migrations/000001_create_accounts_table.up.sql
+docker exec -i digital_wallet_db psql -U wallet -d digital_wallet < migrations/000002_create_ledger_entries.up.sql
 ```
 
-### 4. Run Unit Tests
+### 5. Run Tests
+Execute all unit tests across domain packages:
 ```powershell
 go test -v ./internal/ledger/...
 ```
 
-### 5. Start the API Server
+### 6. Start the API Server
 ```powershell
 go run ./cmd/api
 ```
 
 ---
 
-## 📡 API Endpoints
+## API Endpoints
 
-| Method | Path | Description | Status Code |
+| Method | Path | Description | Success Code |
 |---|---|---|---|
-| `GET` | `/health` | Server health check | `200 OK` |
-| `POST` | `/accounts` | Create a new financial account | `201 Created` |
+| `GET` | `/health` | Liveness check | `200 OK` |
+| `POST` | `/accounts` | Create a new account | `201 Created` |
+| `GET` | `/accounts/{id}/balance` | Fetch account details and current derived balance | `200 OK` |
 
-### Example: Create an Account
+---
+
+## API Examples
+
+### Create Account
+
+**Request:**
 ```powershell
 curl -X POST http://localhost:8080/accounts `
   -H "Content-Type: application/json" `
@@ -109,11 +159,50 @@ curl -X POST http://localhost:8080/accounts `
 **Response (`201 Created`):**
 ```json
 {
-  "id": "e8222bb5-c53b-4ef8-bb6d-6bb9bd380a11",
+  "id": "1e26d609-a543-4845-b3be-9a7756303b4d",
   "owner_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
   "currency": "USD",
   "type": "AVAILABLE",
-  "created_at": "2026-09-12T01:19:10Z",
-  "updated_at": "2026-09-12T01:19:10Z"
+  "created_at": "2026-09-13T20:06:57.184Z",
+  "updated_at": "2026-09-13T20:06:57.184Z"
 }
 ```
+
+---
+
+### Get Account Balance
+
+**Request:**
+```powershell
+curl -X GET http://localhost:8080/accounts/1e26d609-a543-4845-b3be-9a7756303b4d/balance
+```
+
+**Response (`200 OK`):**
+```json
+{
+  "account_id": "1e26d609-a543-4845-b3be-9a7756303b4d",
+  "currency": "USD",
+  "balance": 6500
+}
+```
+
+> Note: The balance is returned in minor units (e.g., `6500` = $65.00).
+
+---
+
+### Error Responses
+
+All error responses adhere to a consistent JSON format:
+
+```json
+{
+  "error": "account not found"
+}
+```
+
+| HTTP Status | Condition |
+|---|---|
+| `400 Bad Request` | Malformed JSON body, unsupported currency, or invalid UUID format |
+| `404 Not Found` | Requested account ID does not exist |
+| `409 Conflict` | Account with same `(owner_id, currency)` already exists |
+| `500 Internal Server Error` | Database or unexpected server failure (details masked) |
