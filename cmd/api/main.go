@@ -9,6 +9,7 @@ import (
 	"github.com/adhamelsaady/digital-wallet/internal/config"
 	"github.com/adhamelsaady/digital-wallet/internal/db"
 	"github.com/adhamelsaady/digital-wallet/internal/storage"
+	"github.com/adhamelsaady/digital-wallet/internal/ledger"
 	"github.com/joho/godotenv"
 )
 
@@ -27,7 +28,8 @@ func main() {
 	log.Println(" database connection established")
 
 	accountRepository := storage.NewAccountRepository(pool)
-	accountHandler := api.NewAccountHandler(accountRepository)
+	ledgerService := ledger.NewService(accountRepository)
+	accountHandler := api.NewAccountHandler(accountRepository , ledgerService)
 
 	router := api.NewRouter(accountHandler)
 	addr := cfg.ServerPort

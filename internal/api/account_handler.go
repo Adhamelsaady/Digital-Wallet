@@ -4,16 +4,19 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"github.com/google/uuid"
+
 	"github.com/adhamelsaady/digital-wallet/internal/ledger"
 	"github.com/adhamelsaady/digital-wallet/internal/storage"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 type AccountHandler struct {
 	accountRepository *storage.AccountRepository
+	ledgerService *ledger.Service
 }
 
-func NewAccountHandler(repository *storage.AccountRepository) *AccountHandler {
-	return &AccountHandler{accountRepository: repository}
+func NewAccountHandler(accountRepository *storage.AccountRepository , ledgerService *ledger.Service) *AccountHandler {
+	return &AccountHandler{accountRepository: accountRepository , ledgerService: ledgerService}
 }
 
 type createAccountRequest struct {
@@ -25,7 +28,7 @@ type createAccountRequest struct {
 type balanceResponse struct {
 	AccountId uuid.UUID `json:"account_id"`
 	Currency string `json:"currency"`
-	Balance string `json:"balance"`
+	Balance int64 `json:"balance"`
 }
 
 func (accountHandler *AccountHandler) CreateAccount (writer http.ResponseWriter , request *http.Request) {
@@ -54,4 +57,30 @@ func (accountHandler *AccountHandler) CreateAccount (writer http.ResponseWriter 
 		return
 	}
 	writeJSON(writer, http.StatusCreated, account)
+}
+
+func (accountHandler *AccountHandler) GetBalance (writer http.ResponseWriter , request *http.Request) {
+	idStr := chi.URLParam(request , "id")
+	accountId , err := uuid.Parse(idStr)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, "invalid account ID")
+		return
+	}
+	account , balance , err := accountHandler.ledgerService.GetAccountAndBalance(request.Context() , accountId)
+
+	if err != nil {
+		if errors.Is(err, ledger.ErrorAccountNotFound) {
+			writeError(writer, http.StatusNotFound, err.Error())
+			return
+		}
+		writeError(writer, http.StatusInternalServerError, "failed to get balance")
+		return
+	}
+	response := balanceResponse {
+		AccountId: accountId,
+		Currency: account.Currency,
+		Balance: balance,
+	}
+	writeJSON(writer, http.StatusOK, response)
+
 }
