@@ -28,7 +28,8 @@ func main() {
 	log.Println(" database connection established")
 
 	accountRepository := storage.NewAccountRepository(pool)
-	ledgerService := ledger.NewService(accountRepository)
+	transferRepository := storage.NewTransferRepository(pool)
+	ledgerService := ledger.NewService(accountRepository , transferRepository)
 	accountHandler := api.NewAccountHandler(accountRepository , ledgerService)
 
 	router := api.NewRouter(accountHandler)
