@@ -25,14 +25,14 @@ type Account struct {
 }
 
 
-var	ErrorInvalidCurrency = errors.New("currency not supported")
-var	ErrorAccountNotFound = errors.New("account not found")
+var	ErrorInvalidCurrency = errors.New("Currency not supported")
+var	ErrorAccountNotFound = errors.New("Account not found")
 var	ErrorInsufficientFunds = errors.New("insufficient funds")
-var	ErrorInvalidOwner = errors.New("invalid owner")
-var	ErrorInvalidType = errors.New("invalid account type")
-var ErrorAccountDuplicate = errors.New("duplicate account")
-var ErrorSelfTransfer = errors.New("cannot transfer to the same account")
-var ErrorCurrencyMismatch = errors.New("accounts must have the same currency")
+var	ErrorInvalidOwner = errors.New("Invalid owner")
+var	ErrorInvalidType = errors.New("Invalid account type")
+var ErrorAccountDuplicate = errors.New("Account duplicate")
+var ErrorSelfTransfer = errors.New("Cannot transfer to the same account")
+var ErrorCurrencyMismatch = errors.New("Accounts must have the same currency")
 
 
 func NewAccount (ownerId uuid.UUID, currency string , accountType string) (*Account, error) {

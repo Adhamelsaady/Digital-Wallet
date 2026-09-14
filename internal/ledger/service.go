@@ -39,7 +39,7 @@ func (s *Service) GetAccountAndBalance(ctx context.Context, accountId uuid.UUID)
 
 func (s *Service) CreateTransfer (ctx context.Context, params TransferParams) (*TransferResponse, error) {
 	if params.Amount <= 0 {
-		return nil , ErrorInsufficientFunds
+		return nil , ErrorInvalidAmount
 	}
 	if params.FromAccountId == params.ToAccountId {
 		return nil , ErrorSelfTransfer
