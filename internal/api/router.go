@@ -13,7 +13,7 @@ func NewRouter(a *AccountHandler , t *TransferHandler) *chi.Mux {
 		r.Post("/" , a.CreateAccount)
 		r.Get("/{id}/balance" , a.GetBalance)
 	})
-	router.Route("/tranfers" , func(r chi.Router) {
+	router.Route("/transfers" , func(r chi.Router) {
 		r.Post("/" , t.CreateTransfer)
 	})
 	return router

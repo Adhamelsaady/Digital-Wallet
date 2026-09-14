@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	referenceTransfer = "Transfer"
-	statusCompleted = "Completed"
-	entryDebit = "Debit"
-	entryCredit = "Credit"
+	referenceTransfer = "TRANSFER"
+	statusCompleted   = "COMPLETED"
+	entryDebit        = "DEBIT"
+	entryCredit       = "CREDIT"
 )
 
 type TransferRepository struct {
