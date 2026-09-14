@@ -12,12 +12,17 @@ type AccountStore interface {
 	CalculateBalance(ctx context.Context, accountId uuid.UUID) (int64, error)
 }
 
-type Service struct {
-	accountRepository AccountStore
+type TransferStore interface {
+	ExecuteTransfer(ctx context.Context, params TransferParams) (*TransferResponse, error)
 }
 
-func NewService(accountRepository AccountStore) *Service {
-	return &Service{accountRepository: accountRepository}
+type Service struct {
+	accountRepository AccountStore
+	transferRepository TransferStore
+}
+
+func NewService(accountRepository AccountStore, transferRepository TransferStore) *Service {
+	return &Service{accountRepository: accountRepository, transferRepository: transferRepository}
 }
 
 func (s *Service) GetAccountAndBalance(ctx context.Context, accountId uuid.UUID) (*Account, int64, error) {
@@ -29,5 +34,19 @@ func (s *Service) GetAccountAndBalance(ctx context.Context, accountId uuid.UUID)
 	if err != nil {
 		return nil, 0, fmt.Errorf("ledger.Service: %w", err)
 	}
-	return account, balance, nil
+	return account,balance, nil
+}
+
+func (s *Service) CreateTransfer (ctx context.Context, params TransferParams) (*TransferResponse, error) {
+	if params.Amount <= 0 {
+		return nil , ErrorInsufficientFunds
+	}
+	if params.FromAccountId == params.ToAccountId {
+		return nil , ErrorSelfTransfer
+	}
+	result , err := s.transferRepository.ExecuteTransfer(ctx, params)
+	if err != nil {
+		return nil , fmt.Errorf("ledger.Service: %w", err)
+	}
+	return result, nil
 }

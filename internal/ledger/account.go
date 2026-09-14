@@ -31,6 +31,9 @@ var	ErrorInsufficientFunds = errors.New("insufficient funds")
 var	ErrorInvalidOwner = errors.New("invalid owner")
 var	ErrorInvalidType = errors.New("invalid account type")
 var ErrorAccountDuplicate = errors.New("duplicate account")
+var ErrorSelfTransfer = errors.New("cannot transfer to the same account")
+var ErrorCurrencyMismatch = errors.New("accounts must have the same currency")
+
 
 func NewAccount (ownerId uuid.UUID, currency string , accountType string) (*Account, error) {
 	if ownerId == uuid.Nil {
