@@ -44,11 +44,15 @@ This project implements a production-grade digital wallet and double-entry ledge
 │   │   ├── account_test.go         # Table-driven unit tests for Account
 │   │   ├── ledger.go               # LedgerEntry entity & balance calculation logic
 │   │   ├── ledger_test.go          # Unit tests for ledger operations
-│   │   └── service.go              # Ledger service & AccountStore consumer interface
+│   │   ├── transfer.go             # TransferParams & TransferResponse domain types  [Phase 4]
+│   │   ├── transfer_test.go        # Unit tests for CreateTransfer validation         [Phase 4]
+│   │   └── service.go              # Ledger service, AccountStore & TransferStore interfaces
 │   ├── storage/                    # Infrastructure layer: raw SQL repository implementations
-│   │   └── account_repository.go   # PostgreSQL account and balance queries
+│   │   ├── account_repository.go   # PostgreSQL account and balance queries
+│   │   └── transfer_repository.go  # Atomic pgx.Tx transfer execution                [Phase 4]
 │   └── api/                        # HTTP transport layer
 │       ├── account_handler.go      # REST handlers for accounts & balances
+│       ├── transfer_handler.go     # POST /transfers handler                          [Phase 4]
 │       ├── health.go               # Health check handler
 │       ├── response.go             # Standardized JSON response helpers
 │       └── router.go               # Chi router setup & middleware pipelines
@@ -142,6 +146,7 @@ go run ./cmd/api
 | `GET` | `/health` | Liveness check | `200 OK` |
 | `POST` | `/accounts` | Create a new account | `201 Created` |
 | `GET` | `/accounts/{id}/balance` | Fetch account details and current derived balance | `200 OK` |
+| `POST` | `/transfers` | Atomically transfer funds between two accounts | `201 Created` |
 
 ---
 
@@ -190,6 +195,33 @@ curl -X GET http://localhost:8080/accounts/1e26d609-a543-4845-b3be-9a7756303b4d/
 
 ---
 
+### Transfer Funds
+
+**Request:**
+```powershell
+curl -X POST http://localhost:8080/transfers `
+  -H "Content-Type: application/json" `
+  -d '{"from_account_id": "<SENDER_ID>", "to_account_id": "<RECEIVER_ID>", "amount": 3500, "currency": "USD", "description": "Payment for coffee"}'
+```
+
+**Response (`201 Created`):**
+```json
+{
+  "transaction_id": "b2e1d3f4-...",
+  "from_account_id": "<SENDER_ID>",
+  "to_account_id": "<RECEIVER_ID>",
+  "amount": 3500,
+  "currency": "USD",
+  "description": "Payment for coffee",
+  "status": "COMPLETED",
+  "created_at": "2026-09-15T01:39:46Z"
+}
+```
+
+> Note: `amount` is in minor units (`3500` = $35.00). Both accounts must share the same currency.
+
+---
+
 ### Error Responses
 
 All error responses adhere to a consistent JSON format:
@@ -202,7 +234,8 @@ All error responses adhere to a consistent JSON format:
 
 | HTTP Status | Condition |
 |---|---|
-| `400 Bad Request` | Malformed JSON body, unsupported currency, or invalid UUID format |
+| `400 Bad Request` | Malformed JSON body, unsupported currency, invalid UUID, zero/negative amount, or self-transfer |
 | `404 Not Found` | Requested account ID does not exist |
-| `409 Conflict` | Account with same `(owner_id, currency)` already exists |
+| `409 Conflict` | Account with same `(owner_id, currency)` already exists, or currency mismatch on transfer |
+| `422 Unprocessable Entity` | Sender has insufficient funds |
 | `500 Internal Server Error` | Database or unexpected server failure (details masked) |
