@@ -31,8 +31,8 @@ func main() {
 	transferRepository := storage.NewTransferRepository(pool)
 	ledgerService := ledger.NewService(accountRepository , transferRepository)
 	accountHandler := api.NewAccountHandler(accountRepository , ledgerService)
-
-	router := api.NewRouter(accountHandler)
+	transferHandler := api.NewTransferHandler(ledgerService)
+	router := api.NewRouter(accountHandler, transferHandler)
 	addr := cfg.ServerPort
 	if addr != "" && addr[0] != ':' {
 		addr = ":" + addr
